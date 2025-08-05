@@ -211,7 +211,7 @@ export class ClassesService {
         classId,
         enrollmentDate: new Date(),
         status: EnrollmentStatus.ENROLLED,
-        ...(notes && { notes }) // 👈 Solo incluir notes si existe
+        ...(notes && { notes }) 
       });
 
       const savedEnrollment = await this.enrollmentRepository.save(enrollment);
