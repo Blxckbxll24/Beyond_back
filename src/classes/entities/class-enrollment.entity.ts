@@ -41,8 +41,8 @@ export class ClassEnrollment {
     @Column('datetime', { nullable: true })
     attendanceDate: Date;
 
-    @Column({ nullable: true }) // 👈 CORREGIDO: nullable: true permite undefined
-    notes?: string; // 👈 CORREGIDO: opcional con ?
+    @Column({ nullable: true }) 
+    notes?: string;
 
     @CreateDateColumn()
     createdAt: Date;

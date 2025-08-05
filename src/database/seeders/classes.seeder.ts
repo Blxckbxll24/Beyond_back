@@ -129,7 +129,7 @@ export class ClassesSeeder {
         price: 50.00,
         room: 'Sala D',
         equipment: 'Spine Corrector, Ladder Barrel',
-        instructorId: coaches[3 % coaches.length].id // 👈 CORREGIDO: era "coaches[3].id"
+        instructorId: coaches[3 % coaches.length].id 
       }
     ];
 

@@ -85,7 +85,7 @@ export class Class {
   @Column({ default: true })
   isActive: boolean;
 
-  // Relación con el instructor (coach) - CORREGIDO
+  // Relación con el instructor (coach) 
   @ManyToOne(() => User, { eager: true })
   @JoinColumn({ name: 'instructorId' })
   instructor: User;

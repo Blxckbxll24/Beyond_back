@@ -23,7 +23,7 @@ export class ReportsService {
         where: {
           startTime: Between(startDate, endDate)
         },
-        relations: ['instructor', 'enrollments'] // 👈 CORREGIDO: de 'coach' a 'instructor'
+        relations: ['instructor', 'enrollments'] 
       });
 
       const totalClasses = classes.length;
@@ -79,7 +79,7 @@ export class ReportsService {
 
       const classes = await this.classRepository.find({
         where: {
-          instructorId: coachId, // 👈 CORREGIDO: de 'coachId' a 'instructorId'
+          instructorId: coachId, 
           startTime: Between(startDate, endDate)
         },
         relations: ['enrollments']

@@ -32,20 +32,20 @@ export class TodayClassDto {
   canMarkAttendance: boolean;
 }
 
-// 👈 PRIMERO definir ValidateQrDataDto
+
 export class ValidateQrDataDto {
-  @ApiProperty({ type: QrUserDto }) // 👈 SIN función arrow
+  @ApiProperty({ type: QrUserDto }) 
   user: QrUserDto;
 
   @ApiProperty({ type: [TodayClassDto] })
   todayClasses: TodayClassDto[];
 }
 
-// 👈 DESPUÉS definir ValidateQrResponseDto
+
 export class ValidateQrResponseDto {
   @ApiProperty()
   success: boolean;
 
-  @ApiProperty({ type: ValidateQrDataDto }) // 👈 SIN función arrow
+  @ApiProperty({ type: ValidateQrDataDto })
   data: ValidateQrDataDto;
 }
