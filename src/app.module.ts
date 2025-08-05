@@ -1,38 +1,87 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+// Modules
+import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { RolesModule } from './roles/roles.module';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ClassesModule } from './classes/classes.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { ProductsModule } from './products/products.module';
+import { PaymentsModule } from './payments/payments.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ReportsModule } from './reports/reports.module';
+import { SpaModule } from './spa/spa.module';
+import { SeedersModule } from './database/seeders/seeders.module';
+import { QrModule } from './qr/qr.module';
+
+// Main App
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+
+// Entities
 import { User } from './user/entities/user.entity';
-import { parseEnv } from 'node:util';
-import { ConfigModule } from '@nestjs/config';
 import { Role } from './roles/entities/role.entity';
-
-
-console.log('process.env.DB_USER', process.env.DB_USER);
-console.log('process.env.DB_PASSWORD', process.env.DB_PASSWORD);
-
+import { Class } from './classes/entities/class.entity';
+import { ClassEnrollment } from './classes/entities/class-enrollment.entity';
+import { Appointment } from './appointments/entities/appointment.entity';
+import { Product } from './products/entities/product.entity';
+import { Payment } from './payments/entities/payment.entity';
+import { Notification } from './notifications/entities/notification.entity';
+import { Package } from './packages/entities/package.entity';
+import { UserPackage } from './packages/entities/user-package.entity';
+import { SpaService } from './spa/entities/spa-service.entity';
+import { SpaBooking } from './spa/entities/spa-booking.entity';
 
 @Module({
-  imports: [UserModule, RolesModule,
-      ConfigModule.forRoot({
+  imports: [
+    ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env', // Especifica explícitamente el archivo .env
     }),
-    TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 8888,
-      username: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      entities: [User, Role],
-      synchronize: true,
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        type: 'mysql',
+        host: configService.get('DB_HOST', 'localhost'),
+        port: configService.get('DB_PORT', 3306),
+        username: configService.get('DB_USER', 'root'),
+        password: configService.get('DB_PASSWORD', 'root'),
+        database: configService.get('DB_NAME', 'beyond'),
+        entities: [
+          User,
+          Role,
+          Class,
+          ClassEnrollment,
+          Appointment,
+          Product,
+          Payment,
+          Notification,
+          Package,
+          UserPackage,
+          SpaService,
+          SpaBooking
+        ],
+        synchronize: true, // Solo para desarrollo
+        logging: false,
+      }),
+      inject: [ConfigService],
     }),
+    AuthModule,
+    UserModule,
+    RolesModule,
+    ClassesModule,
+    AppointmentsModule,
+    ProductsModule,
+    PaymentsModule,
+    NotificationsModule,
+    ReportsModule,
+    SpaModule,
+    SeedersModule,
+    QrModule,
   ],
   controllers: [AppController],
   providers: [AppService],
-
-
 })
 export class AppModule {}
