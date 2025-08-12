@@ -2,100 +2,94 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { Class } from '../classes/entities/class.entity';
-import { ClassEnrollment, EnrollmentStatus } from '../classes/entities/class-enrollment.entity';
-import { Appointment, AppointmentStatus } from '../appointments/entities/appointment.entity';
-import { Payment, PaymentStatus, PaymentType } from '../payments/entities/payment.entity';
-import { User, UserType } from '../user/entities/user.entity';
+import { ClassEnrollment } from '../classes/entities/class-enrollment.entity';
+import { User } from '../user/entities/user.entity';
 
 @Injectable()
 export class ReportsService {
   constructor(
-    @InjectRepository(Class) private classRepository: Repository<Class>,
-    @InjectRepository(ClassEnrollment) private enrollmentRepository: Repository<ClassEnrollment>,
-    @InjectRepository(Appointment) private appointmentRepository: Repository<Appointment>,
-    @InjectRepository(Payment) private paymentRepository: Repository<Payment>,
-    @InjectRepository(User) private userRepository: Repository<User>,
+    @InjectRepository(Class)
+    private readonly classRepository: Repository<Class>,
+    @InjectRepository(ClassEnrollment)
+    private readonly enrollmentRepository: Repository<ClassEnrollment>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
-  async getClassesReport(startDate: Date, endDate: Date) {
+  async getClassAttendanceReport(startDate: Date, endDate: Date) {
     try {
       const classes = await this.classRepository.find({
         where: {
           startTime: Between(startDate, endDate)
         },
-        relations: ['instructor', 'enrollments'] 
+        relations: ['coach', 'enrollments']
       });
 
-      const totalClasses = classes.length;
-      const totalEnrollments = classes.reduce((sum, cls) => sum + cls.enrollments.length, 0);
-      const averageEnrollment = totalClasses > 0 ? totalEnrollments / totalClasses : 0;
-
-      const classTypeStats = classes.reduce((acc, cls) => {
-        acc[cls.type] = (acc[cls.type] || 0) + 1;
-        return acc;
-      }, {});
-
-      const coachStats = classes.reduce((acc, cls) => {
-        const coachName = `${cls.instructor.firstName} ${cls.instructor.lastName}`; // 👈 CORREGIDO: de 'cls.coach' a 'cls.instructor'
-        if (!acc[coachName]) {
-          acc[coachName] = { classes: 0, totalEnrollments: 0 };
-        }
-        acc[coachName].classes++;
-        acc[coachName].totalEnrollments += cls.enrollments.length;
-        return acc;
-      }, {});
+      const report = classes.map(cls => {
+        const coachName = cls.coach ? `${cls.coach.firstName} ${cls.coach.lastName}` : 'Sin coach asignado';
+        
+        return {
+          id: cls.id,
+          className: cls.name,
+          coachName,
+          date: cls.startTime,
+          enrolled: cls.currentEnrollments,
+          capacity: cls.maxEnrollments,
+          occupancy: Math.round((cls.currentEnrollments / cls.maxEnrollments) * 100),
+          revenue: cls.price * cls.currentEnrollments
+        };
+      });
 
       return {
         success: true,
-        data: {
-          period: { startDate, endDate },
-          summary: {
-            totalClasses,
-            totalEnrollments,
-            averageEnrollment: Math.round(averageEnrollment * 100) / 100
-          },
-          classTypeStats,
-          coachStats,
-          classes
+        data: report,
+        summary: {
+          totalClasses: classes.length,
+          totalEnrolled: report.reduce((sum, cls) => sum + cls.enrolled, 0),
+          totalRevenue: report.reduce((sum, cls) => sum + cls.revenue, 0),
+          averageOccupancy: report.length > 0 ? Math.round(
+            report.reduce((sum, cls) => sum + cls.occupancy, 0) / report.length
+          ) : 0
         }
       };
     } catch (error) {
       throw new HttpException(
-        `Error al generar reporte de clases: ${error.message}`,
+        `Error generando reporte de asistencia: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
-  async getCoachPerformanceReport(coachId: number, startDate: Date, endDate: Date) {
+  async getCoachPerformance(coachId: number, startDate?: Date, endDate?: Date) {
     try {
+      let whereCondition: any = {
+        coachId: coachId,
+      };
+
+      if (startDate && endDate) {
+        whereCondition.startTime = Between(startDate, endDate);
+      }
+
+      const classes = await this.classRepository.find({
+        where: whereCondition,
+        relations: ['enrollments', 'coach']
+      });
+
+      const totalClasses = classes.length;
+      const totalEnrollments = classes.reduce((sum, cls) => sum + cls.currentEnrollments, 0);
+      const totalRevenue = classes.reduce((sum, cls) => sum + (cls.price * cls.currentEnrollments), 0);
+      const averageOccupancy = totalClasses > 0 
+        ? Math.round((totalEnrollments / classes.reduce((sum, cls) => sum + cls.maxEnrollments, 0)) * 100)
+        : 0;
+
+      // ✅ CORREGIR: manejar el caso donde coach puede ser null
       const coach = await this.userRepository.findOne({
-        where: { id: coachId, userType: UserType.COACH }
+        where: { id: coachId }
       });
 
       if (!coach) {
         throw new HttpException('Coach no encontrado', HttpStatus.NOT_FOUND);
       }
-
-      const classes = await this.classRepository.find({
-        where: {
-          instructorId: coachId, 
-          startTime: Between(startDate, endDate)
-        },
-        relations: ['enrollments']
-      });
-
-      const totalClassesTaught = classes.length;
-      const totalStudents = classes.reduce((sum, cls) => sum + cls.enrollments.length, 0);
-      const attendedClasses = classes.reduce((sum, cls) => {
-        return sum + cls.enrollments.filter(e => e.status === EnrollmentStatus.ATTENDED).length;
-      }, 0);
-
-      const attendanceRate = totalStudents > 0 ? (attendedClasses / totalStudents) * 100 : 0;
-
-      // Calcular ganancias del coach (asumiendo 30% de comisión)
-      const revenue = classes.reduce((sum, cls) => sum + (Number(cls.price) * cls.enrollments.length), 0);
-      const coachEarnings = revenue * 0.3; // 30% comisión
 
       return {
         success: true,
@@ -105,30 +99,38 @@ export class ReportsService {
             name: `${coach.firstName} ${coach.lastName}`,
             email: coach.email
           },
-          period: { startDate, endDate },
           performance: {
-            totalClassesTaught,
-            totalStudents,
-            attendedClasses,
-            attendanceRate: Math.round(attendanceRate * 100) / 100,
-            revenue,
-            coachEarnings: Math.round(coachEarnings * 100) / 100
-          },
-          classes
+            totalClasses,
+            totalEnrollments,
+            totalRevenue,
+            averageOccupancy,
+            classesDetails: classes.map(cls => ({
+              id: cls.id,
+              name: cls.name,
+              date: cls.startTime,
+              enrolled: cls.currentEnrollments,
+              capacity: cls.maxEnrollments,
+              revenue: cls.price * cls.currentEnrollments
+            }))
+          }
         }
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new HttpException(
-        `Error al generar reporte de rendimiento: ${error.message}`,
+        `Error obteniendo performance del coach: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
-  async getUserProgressReport(userId: number) {
+  // ✅ AGREGAR: método getUserProgress que faltaba
+  async getUserProgress(userId: number) {
     try {
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      
+      const user = await this.userRepository.findOne({
+        where: { id: userId }
+      });
+
       if (!user) {
         throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
       }
@@ -136,21 +138,28 @@ export class ReportsService {
       const enrollments = await this.enrollmentRepository.find({
         where: { userId },
         relations: ['class'],
-        order: { enrollmentDate: 'ASC' }
+        order: { enrollmentDate: 'DESC' }
       });
 
-      const appointments = await this.appointmentRepository.find({
-        where: { clientId: userId },
-        relations: ['specialist'],
-        order: { scheduledDate: 'ASC' }
+      const completedClasses = enrollments.filter(e => e.attendanceDate !== null).length;
+      const totalEnrollments = enrollments.length;
+      const completionRate = totalEnrollments > 0 ? Math.round((completedClasses / totalEnrollments) * 100) : 0;
+
+      // Agrupar por tipo de clase
+      const classTypeStats = {};
+      enrollments.forEach(enrollment => {
+        const classType = enrollment.class.type;
+        if (!classTypeStats[classType]) {
+          classTypeStats[classType] = {
+            enrolled: 0,
+            completed: 0
+          };
+        }
+        classTypeStats[classType].enrolled++;
+        if (enrollment.attendanceDate) {
+          classTypeStats[classType].completed++;
+        }
       });
-
-      const totalClassesEnrolled = enrollments.length;
-      const classesAttended = enrollments.filter(e => e.status === EnrollmentStatus.ATTENDED).length;
-      const totalAppointments = appointments.length;
-      const completedAppointments = appointments.filter(a => a.status === AppointmentStatus.COMPLETED).length;
-
-      const progressRate = totalClassesEnrolled > 0 ? (classesAttended / totalClassesEnrolled) * 100 : 0;
 
       return {
         success: true,
@@ -161,64 +170,146 @@ export class ReportsService {
             email: user.email
           },
           progress: {
-            totalClassesEnrolled,
-            classesAttended,
-            progressRate: Math.round(progressRate * 100) / 100,
-            totalAppointments,
-            completedAppointments
-          },
-          enrollments,
-          appointments
+            totalEnrollments,
+            completedClasses,
+            completionRate,
+            classTypeBreakdown: Object.keys(classTypeStats).map(type => ({
+              type,
+              enrolled: classTypeStats[type].enrolled,
+              completed: classTypeStats[type].completed,
+              completionRate: Math.round((classTypeStats[type].completed / classTypeStats[type].enrolled) * 100)
+            })),
+            recentActivity: enrollments.slice(0, 10).map(e => ({
+              className: e.class.name,
+              enrollmentDate: e.enrollmentDate,
+              attendanceDate: e.attendanceDate,
+              status: e.status
+            }))
+          }
         }
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new HttpException(
-        `Error al generar reporte de progreso: ${error.message}`,
+        `Error obteniendo progreso del usuario: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
-  async getFinancialReport(startDate: Date, endDate: Date) {
+  async getMonthlyReport(year: number, month: number) {
     try {
-      const payments = await this.paymentRepository.find({
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+
+      const classes = await this.classRepository.find({
         where: {
-          transactionDate: Between(startDate, endDate),
-          status: PaymentStatus.COMPLETED
+          startTime: Between(startDate, endDate)
         },
-        relations: ['user']
+        relations: ['coach', 'enrollments']
       });
 
-      const totalRevenue = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-      
-      const revenueByType = payments.reduce((acc, payment) => {
-        acc[payment.type] = (acc[payment.type] || 0) + Number(payment.amount);
-        return acc;
-      }, {} as Record<PaymentType, number>);
+      const dailyStats = {};
+      const coachStats = {};
 
-      const monthlyRevenue = payments.reduce((acc, payment) => {
-        const month = payment.transactionDate.toISOString().substring(0, 7); // YYYY-MM
-        acc[month] = (acc[month] || 0) + Number(payment.amount);
-        return acc;
-      }, {});
+      classes.forEach(cls => {
+        const day = cls.startTime.getDate();
+        const coachId = cls.coachId;
+        const coachName = cls.coach ? `${cls.coach.firstName} ${cls.coach.lastName}` : 'Sin coach';
+
+        // Stats diarios
+        if (!dailyStats[day]) {
+          dailyStats[day] = {
+            date: day,
+            classes: 0,
+            enrollments: 0,
+            revenue: 0
+          };
+        }
+        dailyStats[day].classes++;
+        dailyStats[day].enrollments += cls.currentEnrollments;
+        dailyStats[day].revenue += cls.price * cls.currentEnrollments;
+
+        // Stats por coach
+        if (!coachStats[coachId]) {
+          coachStats[coachId] = {
+            coachName,
+            classes: 0,
+            enrollments: 0,
+            revenue: 0
+          };
+        }
+        coachStats[coachId].classes++;
+        coachStats[coachId].enrollments += cls.currentEnrollments;
+        coachStats[coachId].revenue += cls.price * cls.currentEnrollments;
+      });
 
       return {
         success: true,
         data: {
-          period: { startDate, endDate },
-          summary: {
-            totalRevenue: Math.round(totalRevenue * 100) / 100,
-            totalTransactions: payments.length,
-            averageTransaction: payments.length > 0 ? Math.round((totalRevenue / payments.length) * 100) / 100 : 0
-          },
-          revenueByType,
-          monthlyRevenue,
-          payments
+          period: { year, month },
+          totalClasses: classes.length,
+          totalEnrollments: classes.reduce((sum, cls) => sum + cls.currentEnrollments, 0),
+          totalRevenue: classes.reduce((sum, cls) => sum + (cls.price * cls.currentEnrollments), 0),
+          dailyStats: Object.values(dailyStats),
+          coachStats: Object.values(coachStats)
         }
       };
     } catch (error) {
       throw new HttpException(
-        `Error al generar reporte financiero: ${error.message}`,
+        `Error generando reporte mensual: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async getEnrollmentTrends(startDate: Date, endDate: Date) {
+    try {
+      const enrollments = await this.enrollmentRepository.find({
+        where: {
+          enrollmentDate: Between(startDate, endDate)
+        },
+        relations: ['class', 'user']
+      });
+
+      const dailyEnrollments = {};
+      const classTypeStats = {};
+
+      enrollments.forEach(enrollment => {
+        const day = enrollment.enrollmentDate.toISOString().split('T')[0];
+        const classType = enrollment.class.type;
+
+        // Inscripciones por día
+        if (!dailyEnrollments[day]) {
+          dailyEnrollments[day] = 0;
+        }
+        dailyEnrollments[day]++;
+
+        // Stats por tipo de clase
+        if (!classTypeStats[classType]) {
+          classTypeStats[classType] = 0;
+        }
+        classTypeStats[classType]++;
+      });
+
+      return {
+        success: true,
+        data: {
+          totalEnrollments: enrollments.length,
+          dailyTrends: Object.keys(dailyEnrollments).map(date => ({
+            date,
+            enrollments: dailyEnrollments[date]
+          })),
+          classTypeDistribution: Object.keys(classTypeStats).map(type => ({
+            type,
+            enrollments: classTypeStats[type],
+            percentage: enrollments.length > 0 ? Math.round((classTypeStats[type] / enrollments.length) * 100) : 0
+          }))
+        }
+      };
+    } catch (error) {
+      throw new HttpException(
+        `Error obteniendo tendencias de inscripciones: ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

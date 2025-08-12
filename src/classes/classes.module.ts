@@ -7,9 +7,15 @@ import { ClassEnrollment } from './entities/class-enrollment.entity';
 import { User } from '../user/entities/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Class, ClassEnrollment, User])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Class,           // ✅ Entidad Class
+      ClassEnrollment, // ✅ Entidad ClassEnrollment
+      User             // ✅ Entidad User
+    ])
+  ],
   controllers: [ClassesController],
   providers: [ClassesService],
-  exports: [ClassesService],
+  exports: [ClassesService] // ✅ Exportar el servicio para usar en otros módulos
 })
 export class ClassesModule {}

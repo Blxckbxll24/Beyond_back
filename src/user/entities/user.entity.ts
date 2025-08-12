@@ -1,12 +1,13 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { Role } from '../../roles/entities/role.entity';
 import { ClassEnrollment } from '../../classes/entities/class-enrollment.entity';
+import { Class } from '../../classes/entities/class.entity';
 
 export enum UserType {
-  CLIENT = 'client',
-  COACH = 'coach',
   ADMIN = 'admin',
-  SPECIALIST = 'specialist' // Nuevo tipo de usuario
+  COACH = 'coach',
+  CLIENT = 'client',
+  SPECIALIST = 'specialist'
 }
 
 @Entity('users')
@@ -23,10 +24,10 @@ export class User {
   @Column()
   password: string;
 
-  @Column()
+  @Column({ nullable: true })
   firstName: string;
 
-  @Column()
+  @Column({ nullable: true })
   lastName: string;
 
   @Column({ nullable: true })
@@ -39,18 +40,21 @@ export class User {
   })
   userType: UserType;
 
-  // 👈 NUEVO: Campos para QR
-  @Column({ unique: true, nullable: true })
-  qrCode: string; // UUID único para el QR
-
-  @Column({ default: true })
-  qrActive: boolean; // Para activar/desactivar el QR
-
-  @Column({ type: 'datetime', nullable: true })
-  lastQrScan: Date; // Última vez que se escaneó el QR
+  // ✅ ARREGLAR: Usar string en lugar de Date para mayor compatibilidad
+  @Column({ nullable: true, length: 10 }) // YYYY-MM-DD
+  dateOfBirth: string;
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ nullable: true })
+  qrCode: string;
+
+  @Column({ default: false })
+  qrActive: boolean;
+
+  @Column({ nullable: true })
+  lastQrScan: Date;
 
   @ManyToMany(() => Role, role => role.users, { eager: true })
   @JoinTable({
@@ -63,6 +67,9 @@ export class User {
   @OneToMany(() => ClassEnrollment, enrollment => enrollment.user)
   enrollments: ClassEnrollment[];
 
+  @OneToMany(() => Class, classEntity => classEntity.coach)
+  classesAsCoach: Class[];
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -71,6 +78,6 @@ export class User {
 
   // Método helper para obtener el nombre completo
   get fullName(): string {
-    return `${this.firstName} ${this.lastName}`;
+    return `${this.firstName || ''} ${this.lastName || ''}`.trim();
   }
 }
