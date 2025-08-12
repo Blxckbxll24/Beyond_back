@@ -1,4 +1,4 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { User, UserType } from './entities/user.entity';
@@ -16,53 +16,91 @@ export class UserService {
 
   async create(createUserDto: CreateUserDto) {
     try {
-      // Verificar si el usuario ya existe
-      const existingUser = await this.userRepository.findOne({
-        where: [
-          { email: createUserDto.email },
-          { username: createUserDto.username }
-        ]
-      });
+      console.log('📝 Creando usuario con datos:', createUserDto);
 
-      if (existingUser) {
-        throw new HttpException(
-          'El usuario o email ya existe',
-          HttpStatus.CONFLICT
-        );
+      // ✅ MAPEAR: role a userType si viene role
+      if (createUserDto.role && !createUserDto.userType) {
+        const roleMapping = {
+          'admin': UserType.ADMIN,
+          'coach': UserType.COACH,  
+          'client': UserType.CLIENT,
+          'specialist': UserType.SPECIALIST
+        };
+        createUserDto.userType = roleMapping[createUserDto.role.toLowerCase()] || UserType.CLIENT;
       }
 
-      // Hashear la contraseña
+      // Hash de la password
       const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-      const user = this.userRepository.create({
-        ...createUserDto,
-        password: hashedPassword
-      });
-
-      // Asignar rol por defecto según el tipo de usuario
-      if (createUserDto.userType) {
-        const defaultRole = await this.roleRepository.findOne({
-          where: { name: createUserDto.userType }
-        });
-        
-        if (defaultRole) {
-          user.roles = [defaultRole];
+      // ✅ ARREGLAR: Tipos para fecha de nacimiento
+      let processedDateOfBirth: string | undefined = undefined;
+      if (createUserDto.dateOfBirth) {
+        try {
+          // Convertir a formato de fecha simple (YYYY-MM-DD)
+          const date = new Date(createUserDto.dateOfBirth);
+          processedDateOfBirth = date.toISOString().split('T')[0]; // Solo la fecha, no la hora
+          console.log('📅 Fecha procesada:', createUserDto.dateOfBirth, '->', processedDateOfBirth);
+        } catch (error) {
+          console.warn('⚠️ Error procesando fecha:', error);
+          processedDateOfBirth = undefined;
         }
       }
 
-      await this.userRepository.save(user);
+      // ✅ ARREGLAR: Crear objeto con tipos correctos
+      const userData: Partial<User> = {
+        username: createUserDto.username,
+        email: createUserDto.email,
+        password: hashedPassword,
+        firstName: createUserDto.firstName,
+        lastName: createUserDto.lastName,
+        phone: createUserDto.phone,
+        userType: createUserDto.userType || UserType.CLIENT,
+        dateOfBirth: processedDateOfBirth,
+        isActive: createUserDto.isActive !== undefined ? createUserDto.isActive : true,
+        qrCode: createUserDto.qrCode,
+        qrActive: createUserDto.qrActive !== undefined ? createUserDto.qrActive : false
+      };
+
+      // Remover propiedades undefined para evitar problemas
+      Object.keys(userData).forEach(key => {
+        if (userData[key] === undefined) {
+          delete userData[key];
+        }
+      });
+
+      console.log('💾 Guardando usuario con datos procesados:', userData);
+
+      const user = this.userRepository.create(userData);
+      const savedUser = await this.userRepository.save(user);
+
+      // ✅ ARREGLAR: savedUser es un User, no un array
+      const { password, ...result } = savedUser;
       
+      console.log('✅ Usuario creado exitosamente:', result.username);
       return {
         success: true,
-        message: 'Usuario creado correctamente',
-        data: { ...user, password: undefined }
+        data: result,
+        message: 'Usuario creado correctamente'
       };
+
     } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new HttpException(
-        `Error al crear el usuario: ${error.message}`,
-        HttpStatus.BAD_REQUEST
-      );
+      console.error('❌ Error creando usuario:', error);
+      
+      if (error.code === '23505') { // Duplicate key error
+        const detail = error.detail || '';
+        if (detail.includes('username')) {
+          throw new BadRequestException('El nombre de usuario ya existe');
+        } else if (detail.includes('email')) {
+          throw new BadRequestException('El email ya existe');
+        }
+      }
+      
+      // Error específico de fecha
+      if (error.message.includes('Incorrect date value') || error.message.includes('dateOfBirth')) {
+        throw new BadRequestException('Formato de fecha de nacimiento inválido. Use formato YYYY-MM-DD.');
+      }
+      
+      throw new BadRequestException(`Error creando usuario: ${error.message}`);
     }
   }
 
@@ -113,37 +151,88 @@ export class UserService {
 
   async update(id: number, updateUserDto: UpdateUserDto) {
     try {
-      const user = await this.userRepository.findOne({
+      console.log('📝 Actualizando usuario ID:', id, 'con datos:', updateUserDto);
+
+      // ✅ MAPEAR: role a userType si viene role
+      if (updateUserDto.role && !updateUserDto.userType) {
+        const roleMapping = {
+          'admin': UserType.ADMIN,
+          'coach': UserType.COACH,  
+          'client': UserType.CLIENT,
+          'specialist': UserType.SPECIALIST
+        };
+        updateUserDto.userType = roleMapping[updateUserDto.role.toLowerCase()] || UserType.CLIENT;
+      }
+
+      // Si viene password, hashearla
+      if (updateUserDto.password && updateUserDto.password.trim()) {
+        updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+      } else {
+        // Si no hay password nueva, no actualizar ese campo
+        delete updateUserDto.password;
+      }
+
+      // ✅ PROCESAR: Fecha de nacimiento si viene
+      if (updateUserDto.dateOfBirth) {
+        try {
+          const date = new Date(updateUserDto.dateOfBirth);
+          updateUserDto.dateOfBirth = date.toISOString().split('T')[0];
+        } catch (error) {
+          console.warn('⚠️ Error procesando fecha en update:', error);
+          delete updateUserDto.dateOfBirth;
+        }
+      }
+
+      // ✅ LIMPIAR: Remover el campo role ya que no existe en la entidad
+      const { role, ...updateData } = updateUserDto;
+
+      // Remover propiedades undefined
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
+
+      console.log('💾 Actualizando con datos limpios:', updateData);
+
+      await this.userRepository.update(id, updateData);
+      
+      const updatedUser = await this.userRepository.findOne({ 
         where: { id },
         relations: ['roles']
       });
       
-      if (!user) {
-        throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
+      if (!updatedUser) {
+        throw new NotFoundException('Usuario no encontrado');
       }
 
-      if (updateUserDto.password) {
-        updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
-      }
-
-      await this.userRepository.update(id, updateUserDto);
-      const updatedUser = await this.userRepository.findOne({
-        where: { id },
-        relations: ['roles'],
-        select: ['id', 'username', 'email', 'firstName', 'lastName', 'phone', 'userType', 'isActive']
-      });
-
+      // No retornar la password
+      const { password, ...result } = updatedUser;
+      
+      console.log('✅ Usuario actualizado exitosamente:', result.username);
       return {
         success: true,
-        message: 'Usuario actualizado correctamente',
-        data: updatedUser
+        data: result,
+        message: 'Usuario actualizado correctamente'
       };
+
     } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new HttpException(
-        `Error al actualizar el usuario: ${error.message}`,
-        HttpStatus.BAD_REQUEST
-      );
+      console.error('❌ Error actualizando usuario:', error);
+      
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      if (error.code === '23505') {
+        const detail = error.detail || '';
+        if (detail.includes('username')) {
+          throw new BadRequestException('El nombre de usuario ya existe');
+        } else if (detail.includes('email')) {
+          throw new BadRequestException('El email ya existe');
+        }
+      }
+      
+      throw new BadRequestException(`Error actualizando usuario: ${error.message}`);
     }
   }
 
@@ -226,6 +315,7 @@ export class UserService {
         data: { ...user, password: undefined }
       };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new HttpException(
         `Error al remover roles: ${error.message}`,
         HttpStatus.BAD_REQUEST
@@ -237,7 +327,7 @@ export class UserService {
     try {
       const coaches = await this.userRepository.find({
         where: { userType: UserType.COACH, isActive: true },
-        select: ['id', 'username', 'firstName', 'lastName', 'email', 'phone']
+        select: ['id', 'firstName', 'lastName', 'email', 'phone']
       });
       
       return {
@@ -257,7 +347,7 @@ export class UserService {
     try {
       const specialists = await this.userRepository.find({
         where: { userType: UserType.SPECIALIST, isActive: true },
-        select: ['id', 'username', 'firstName', 'lastName', 'email', 'phone']
+        select: ['id', 'firstName', 'lastName', 'email', 'phone']
       });
       
       return {

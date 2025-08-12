@@ -23,17 +23,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
-    console.log('🛡️ Guard - Error:', err);
-    console.log('🛡️ Guard - User:', user);
-    console.log('🛡️ Guard - Info:', info);
-    
+  handleRequest(err: any, user: any, info: any) {
     if (err || !user) {
-      console.log('❌ Guard rechazó la request');
       throw err || new UnauthorizedException('Token inválido o usuario no encontrado');
     }
     
-    console.log('✅ Guard aceptó la request');
     return user;
   }
 }

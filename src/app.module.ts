@@ -15,6 +15,7 @@ import { ReportsModule } from './reports/reports.module';
 import { SpaModule } from './spa/spa.module';
 import { SeedersModule } from './database/seeders/seeders.module';
 import { QrModule } from './qr/qr.module';
+import { CoachModule } from './coach/coach.module';
 
 // Main App
 import { AppController } from './app.controller';
@@ -80,6 +81,7 @@ import { SpaBooking } from './spa/entities/spa-booking.entity';
     SpaModule,
     SeedersModule,
     QrModule,
+    CoachModule,
   ],
   controllers: [AppController],
   providers: [AppService],

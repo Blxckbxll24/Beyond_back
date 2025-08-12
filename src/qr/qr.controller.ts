@@ -6,6 +6,7 @@ import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { ValidateQrDto } from './dto/validate-qr.dto';
 import { QrResponseDto } from './dto/qr-response.dto';
 import { ValidateQrResponseDto } from './dto/today-classes.dto';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('qr')
 @Controller('qr')
@@ -14,8 +15,15 @@ import { ValidateQrResponseDto } from './dto/today-classes.dto';
 export class QrController {
   constructor(private readonly qrService: QrService) {}
 
+  @Get('generate')
+  @ApiOperation({ summary: 'Generar QR para el usuario actual' })
+  @ApiResponse({ status: 200, description: 'QR generado correctamente' })
+  generateMyQR(@CurrentUser() user: any) {
+    return this.qrService.generateUserQR(user.id);
+  }
+
   @Get('generate/:userId')
-  @ApiOperation({ summary: 'Generar QR para un usuario' })
+  @ApiOperation({ summary: 'Generar QR para un usuario específico' })
   @ApiResponse({ status: 200, description: 'QR generado correctamente', type: QrResponseDto })
   generateQR(@Param('userId') userId: string) {
     return this.qrService.generateUserQR(+userId);

@@ -7,9 +7,11 @@ import { ClassEnrollment } from '../classes/entities/class-enrollment.entity';
 import { Class } from '../classes/entities/class.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, ClassEnrollment, Class])],
+  imports: [
+    TypeOrmModule.forFeature([User, ClassEnrollment, Class])
+  ],
   controllers: [QrController],
   providers: [QrService],
-  exports: [QrService],
+  exports: [QrService]
 })
 export class QrModule {}

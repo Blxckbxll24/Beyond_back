@@ -1,60 +1,78 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsEnum, IsNumber, IsDateString, IsOptional, Min, Max } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsArray, IsEnum, Min, Max, IsDateString } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ClassType, ClassLevel } from '../entities/class.entity';
 
 export class CreateClassDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Nombre de la clase' })
   @IsString()
+  @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiPropertyOptional({ description: 'Descripción de la clase' })
   @IsString()
+  @IsOptional()
   description?: string;
 
-  @ApiProperty({ enum: ClassType })
+  @ApiProperty({ description: 'Tipo de clase', enum: ClassType })
   @IsEnum(ClassType)
   type: ClassType;
 
-  @ApiProperty({ enum: ClassLevel })
+  @ApiPropertyOptional({ description: 'Nivel de la clase', enum: ClassLevel })
   @IsEnum(ClassLevel)
-  level: ClassLevel;
+  @IsOptional()
+  level?: ClassLevel;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Fecha de la clase (YYYY-MM-DD)' })
   @IsDateString()
-  startTime: string;
+  date: string; // Fecha en formato YYYY-MM-DD
 
-  @ApiProperty()
-  @IsDateString()
-  endTime: string;
+  @ApiProperty({ description: 'Hora de inicio (HH:MM)' })
+  @IsString()
+  @IsNotEmpty()
+  startTime: string; // Hora en formato HH:MM
 
-  @ApiProperty({ minimum: 1, maximum: 50 })
+  @ApiProperty({ description: 'Hora de fin (HH:MM)' })
+  @IsString()
+  @IsNotEmpty()
+  endTime: string; // Hora en formato HH:MM
+
+  @ApiPropertyOptional({ description: 'Duración en minutos' })
+  @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   @Min(1)
-  @Max(50)
-  maxCapacity: number;
+  @Max(200)
+  duration?: number; // Duración en minutos
 
-  @ApiProperty({ minimum: 0 })
+  @ApiProperty({ description: 'Capacidad máxima' })
   @IsNumber()
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  capacity: number; // ✅ Usar 'capacity' en lugar de 'maxEnrollments'
+
+  @ApiPropertyOptional({ description: 'Precio de la clase' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   @Min(0)
-  price: number;
+  price?: number;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ description: 'ID del coach' })
   @IsOptional()
-  @IsString()
-  room?: string;
+  @IsNumber()
+  @Type(() => Number)
+  coachId?: number;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ description: 'Equipamiento requerido' })
   @IsOptional()
-  @IsString()
-  equipment?: string;
+  @IsArray()
+  @IsString({ each: true })
+  equipment?: string[];
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ description: 'Notas adicionales' })
   @IsOptional()
   @IsString()
   notes?: string;
-
-  @ApiProperty()
-  @IsNumber()
-  instructorId: number;
 }

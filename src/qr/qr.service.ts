@@ -218,10 +218,34 @@ export class QrService {
         throw new HttpException('Usuario no encontrado', HttpStatus.NOT_FOUND);
       }
 
+      // Generar nuevo código QR
       user.qrCode = uuidv4();
+      user.qrActive = true;
       await this.userRepository.save(user);
 
-      return this.generateUserQR(userId);
+      // Generar la imagen QR
+      const qrData = {
+        userId: user.id,
+        qrCode: user.qrCode,
+        type: 'attendance',
+        timestamp: new Date().toISOString()
+      };
+
+      const qrImage = await QRCode.toDataURL(JSON.stringify(qrData));
+
+      return {
+        success: true,
+        message: 'QR regenerado correctamente',
+        data: {
+          user: {
+            id: user.id,
+            name: user.fullName,
+            qrCode: user.qrCode
+          },
+          qrImage,
+          qrData
+        }
+      };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(

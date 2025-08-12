@@ -1,29 +1,26 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { ClassEnrollment } from './class-enrollment.entity';
 
-export enum ClassStatus {
-  SCHEDULED = 'scheduled',
-  IN_PROGRESS = 'in_progress', 
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled'
+export enum ClassType {
+  YOGA = 'YOGA',
+  PILATES = 'PILATES',
+  SPINNING = 'SPINNING',
+  CROSSFIT = 'CROSSFIT',
+  AEROBICOS = 'AEROBICOS',
+  FUNCIONAL = 'FUNCIONAL'
 }
 
 export enum ClassLevel {
-  BEGINNER = 'beginner',
-  INTERMEDIATE = 'intermediate',
-  ADVANCED = 'advanced',
-  ALL_LEVELS = 'all_levels'
+  BEGINNER = 'BEGINNER',
+  INTERMEDIATE = 'INTERMEDIATE',
+  ADVANCED = 'ADVANCED'
 }
 
-export enum ClassType {
-  MAT_PILATES = 'mat_pilates',
-  REFORMER = 'reformer',
-  CADILLAC = 'cadillac',
-  CHAIR = 'chair',
-  BARREL = 'barrel',
-  PRENATAL = 'prenatal',
-  REHABILITATION = 'rehabilitation'
+export enum ClassStatus {
+  SCHEDULED = 'SCHEDULED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
 }
 
 @Entity('classes')
@@ -31,7 +28,7 @@ export class Class {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ length: 100 })
   name: string;
 
   @Column({ type: 'text', nullable: true })
@@ -40,31 +37,16 @@ export class Class {
   @Column({
     type: 'enum',
     enum: ClassType,
-    default: ClassType.MAT_PILATES
+    default: ClassType.FUNCIONAL
   })
   type: ClassType;
 
   @Column({
     type: 'enum',
     enum: ClassLevel,
-    default: ClassLevel.ALL_LEVELS
+    default: ClassLevel.BEGINNER
   })
   level: ClassLevel;
-
-  @Column({ type: 'datetime' })
-  startTime: Date;
-
-  @Column({ type: 'datetime' })
-  endTime: Date;
-
-  @Column({ default: 8 })
-  maxCapacity: number;
-
-  @Column({ default: 0 })
-  currentEnrollments: number;
-
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  price: number;
 
   @Column({
     type: 'enum',
@@ -73,42 +55,44 @@ export class Class {
   })
   status: ClassStatus;
 
-  @Column({ nullable: true })
-  room: string;
+  @Column({ type: 'datetime' })
+  startTime: Date;
+
+  @Column({ type: 'datetime' })
+  endTime: Date;
+
+  @Column({ type: 'int', default: 60 })
+  duration: number; // ✅ Agregado
+
+  @Column({ name: 'max_enrollments', type: 'int', default: 20 })
+  maxEnrollments: number; // ✅ Corregido nombre
+
+  @Column({ name: 'current_enrollments', type: 'int', default: 0 })
+  currentEnrollments: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  price: number;
+
+  @Column({ name: 'coach_id', type: 'int' })
+  coachId: number; // ✅ Agregado
+
+  @Column({ type: 'json', nullable: true })
+  equipment: string[]; // ✅ Agregado
 
   @Column({ type: 'text', nullable: true })
-  equipment: string;
+  notes: string; // ✅ Agregado
 
-  @Column({ type: 'text', nullable: true })
-  notes: string;
-
-  @Column({ default: true })
-  isActive: boolean;
-
-  // Relación con el instructor (coach) 
-  @ManyToOne(() => User, { eager: true })
-  @JoinColumn({ name: 'instructorId' })
-  instructor: User;
-
-  @Column({ name: 'instructorId' })
-  instructorId: number;
-
-  // Alias para compatibilidad con el código existente
-  get coach(): User {
-    return this.instructor;
-  }
-
-  get coachId(): number {
-    return this.instructorId;
-  }
-
-  // Relación con inscripciones
-  @OneToMany(() => ClassEnrollment, enrollment => enrollment.class)
-  enrollments: ClassEnrollment[];
-
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  // Relaciones
+  @ManyToOne(() => User, user => user.classesAsCoach)
+  @JoinColumn({ name: 'coach_id' })
+  coach: User;
+
+  @OneToMany(() => ClassEnrollment, enrollment => enrollment.class)
+  enrollments: ClassEnrollment[];
 }
